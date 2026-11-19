@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: Grocery SSO Service
+  description: Process-centric service handling the OAuth 2.0 / OIDC login flow with
+    Authentik and JWT validation.
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - system
+      summary: Liveness probe
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /auth/login:
+    get:
+      tags:
+      - auth
+      summary: 'Start the login: redirect the browser to Authentik'
+      operationId: login_auth_login_get
+      responses:
+        '307':
+          description: Redirect to the Authentik login page
+          content:
+            application/json:
+              schema: {}
+  /auth/callback:
+    get:
+      tags:
+      - auth
+      summary: Receive the authorization code and exchange it for tokens
+      operationId: callback_auth_callback_get
+      parameters:
+      - name: code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Code
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+      - name: error
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '302':
+          description: 'If FRONTEND_URL is set: redirect to the frontend with access_token,
+            id_token, token_type and expires_in in the URL fragment'
+        '400':
+          description: Invalid state or login error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Authentik rejected the exchange
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /auth/verify:
+    get:
+      tags:
+      - auth
+      summary: Validate a Bearer JWT and return the user identity
+      operationId: verify_auth_verify_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Signing keys unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+components:
+  schemas:
+    ErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+      type: object
+      required:
+      - detail
+      title: ErrorResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    TokenResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        id_token:
+          type: string
+          title: Id Token
+        token_type:
+          type: string
+          title: Token Type
+        expires_in:
+          type: integer
+          title: Expires In
+      type: object
+      required:
+      - access_token
+      - id_token
+      - token_type
+      - expires_in
+      title: TokenResponse
+      examples:
+      - access_token: eyJhbGciOiJSUzI1NiIs...
+        expires_in: 3600
+        id_token: eyJhbGciOiJSUzI1NiIs...
+        token_type: Bearer
+    UserInfo:
+      properties:
+        sub:
+          type: string
+          title: Sub
+        preferred_username:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred Username
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        exp:
+          type: integer
+          title: Exp
+      type: object
+      required:
+      - sub
+      - exp
+      title: UserInfo
+      examples:
+      - email: user@example.com
+        exp: 1795104043
+        preferred_username: akadmin
+        sub: '6'
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
